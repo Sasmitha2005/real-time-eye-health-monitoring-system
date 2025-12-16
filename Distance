@@ -1,0 +1,74 @@
+"""
+Real-Time Eye Health Monitoring System using Face Width
+Alerts user if they sit closer than 10 cm to the screen.
+"""
+
+import cv2
+import mediapipe as mp
+import numpy as np
+import pyautogui
+
+# --- SETTINGS ---
+MIN_DISTANCE_CM = 10          # Alert if closer than 10 cm
+ALERT_MESSAGE = "⚠️ You are too close to the screen! Please move back 👀"
+# Calibration constants for face width
+KNOWN_DISTANCE_CM = 30        # Distance used during calibration
+KNOWN_FACE_WIDTH_PX = 120     # Pixel width of face at KNOWN_DISTANCE_CM
+KNOWN_FACE_WIDTH_CM = 14      # Average adult face width in cm
+
+# MediaPipe Face Mesh
+mp_face = mp.solutions.face_mesh
+face_mesh = mp_face.FaceMesh(
+    static_image_mode=False,
+    max_num_faces=1,
+    refine_landmarks=True,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5
+)
+
+# Landmarks for face width (left cheek ↔ right cheek)
+POINT_LEFT = 234
+POINT_RIGHT = 454
+
+def euclidean(a, b, w, h):
+    """Calculate Euclidean distance between two landmarks in pixels."""
+    return np.hypot((a.x - b.x) * w, (a.y - b.y) * h)
+
+def estimate_distance(face_width_px):
+    """Estimate real distance (cm) from face width pixels."""
+    return (KNOWN_DISTANCE_CM * KNOWN_FACE_WIDTH_PX) / face_width_px
+
+def main():
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("Cannot open webcam")
+        return
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        h, w = frame.shape[:2]
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = face_mesh.process(rgb)
+
+        if results.multi_face_landmarks:
+            lm = results.multi_face_landmarks[0].landmark
+            face_width_px = euclidean(lm[POINT_LEFT], lm[POINT_RIGHT], w, h)
+            est_distance = estimate_distance(face_width_px)
+
+            # Debug: print distance in cm (optional)
+            # print(f"Estimated distance: {est_distance:.1f} cm")
+
+            if est_distance < MIN_DISTANCE_CM:
+                pyautogui.alert(ALERT_MESSAGE, "Eye Health Alert")
+
+        if cv2.waitKey(1) & 0xFF == 27:  # Press ESC to quit
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()
